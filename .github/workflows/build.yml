@@ -17,8 +17,15 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
+    # STEP 1: Generate the wrapper FIRST before any config files exist
+    - name: Generate Gradle Wrapper
+      run: gradle wrapper --gradle-version 8.7
+
+    # STEP 2: Inject the upgraded Android Build Engine
     - name: Inject Android Build Engine
       run: |
+        mkdir -p app
+        
         # 1. Create the project settings
         cat << 'EOF' > settings.gradle
         pluginManagement {
@@ -39,7 +46,7 @@ jobs:
         include ':app'
         EOF
         
-        # 2. Create the main project build configuration
+        # 2. Create the main project build configuration (Upgraded to 8.3.0)
         cat << 'EOF' > build.gradle
         buildscript {
             repositories {
@@ -47,8 +54,8 @@ jobs:
                 mavenCentral()
             }
             dependencies {
-                classpath 'com.android.tools.build:gradle:8.1.0'
-                classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.8.0'
+                classpath 'com.android.tools.build:gradle:8.3.0'
+                classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22'
             }
         }
         EOF
@@ -81,9 +88,6 @@ jobs:
             implementation 'androidx.appcompat:appcompat:1.6.1'
         }
         EOF
-
-    - name: Generate Gradle Wrapper
-      run: gradle wrapper --gradle-version 8.2
 
     - name: Grant Execute Permissions
       run: chmod +x gradlew
