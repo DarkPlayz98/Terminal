@@ -17,7 +17,6 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    # FORCE STABLE GRADLE VERSION (Bypasses the 9.5 system error completely)
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
       with:
@@ -27,7 +26,13 @@ jobs:
       run: |
         mkdir -p app
         
-        # 1. Create the project settings
+        # 1. Create gradle.properties (This fixes the AndroidX crash)
+        cat << 'EOF' > gradle.properties
+        android.useAndroidX=true
+        android.enableJetifier=true
+        EOF
+
+        # 2. Create the project settings
         cat << 'EOF' > settings.gradle
         pluginManagement {
             repositories {
@@ -47,7 +52,7 @@ jobs:
         include ':app'
         EOF
         
-        # 2. Create the main project build configuration
+        # 3. Create the main project build configuration
         cat << 'EOF' > build.gradle
         buildscript {
             repositories {
@@ -61,7 +66,7 @@ jobs:
         }
         EOF
         
-        # 3. Create the app-specific compiler rules
+        # 4. Create the app-specific compiler rules
         cat << 'EOF' > app/build.gradle
         plugins {
             id 'com.android.application'
@@ -90,7 +95,6 @@ jobs:
         }
         EOF
 
-    # BUILD DIRECTLY WITHOUT THE WRAPPER
     - name: Build Debug APK
       run: gradle assembleDebug
 
