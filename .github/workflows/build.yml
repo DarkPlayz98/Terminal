@@ -17,11 +17,12 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    # STEP 1: Generate the wrapper FIRST before any config files exist
-    - name: Generate Gradle Wrapper
-      run: gradle wrapper --gradle-version 8.7
+    # FORCE STABLE GRADLE VERSION (Bypasses the 9.5 system error completely)
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: '8.7'
 
-    # STEP 2: Inject the upgraded Android Build Engine
     - name: Inject Android Build Engine
       run: |
         mkdir -p app
@@ -46,7 +47,7 @@ jobs:
         include ':app'
         EOF
         
-        # 2. Create the main project build configuration (Upgraded to 8.3.0)
+        # 2. Create the main project build configuration
         cat << 'EOF' > build.gradle
         buildscript {
             repositories {
@@ -89,11 +90,9 @@ jobs:
         }
         EOF
 
-    - name: Grant Execute Permissions
-      run: chmod +x gradlew
-
+    # BUILD DIRECTLY WITHOUT THE WRAPPER
     - name: Build Debug APK
-      run: ./gradlew assembleDebug
+      run: gradle assembleDebug
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
