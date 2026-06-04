@@ -17,7 +17,75 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Grant execute permission for gradlew
+    - name: Inject Android Build Engine
+      run: |
+        # 1. Create the project settings
+        cat << 'EOF' > settings.gradle
+        pluginManagement {
+            repositories {
+                google()
+                mavenCentral()
+                gradlePluginPortal()
+            }
+        }
+        dependencyResolutionManagement {
+            repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+            repositories {
+                google()
+                mavenCentral()
+            }
+        }
+        rootProject.name = "DarkTerminal"
+        include ':app'
+        EOF
+        
+        # 2. Create the main project build configuration
+        cat << 'EOF' > build.gradle
+        buildscript {
+            repositories {
+                google()
+                mavenCentral()
+            }
+            dependencies {
+                classpath 'com.android.tools.build:gradle:8.1.0'
+                classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.8.0'
+            }
+        }
+        EOF
+        
+        # 3. Create the app-specific compiler rules
+        cat << 'EOF' > app/build.gradle
+        plugins {
+            id 'com.android.application'
+            id 'org.jetbrains.kotlin.android'
+        }
+        android {
+            namespace 'com.itzmedark.terminal'
+            compileSdk 34
+            defaultConfig {
+                applicationId "com.itzmedark.terminal"
+                minSdk 24
+                targetSdk 34
+                versionCode 1
+                versionName "1.0"
+            }
+            compileOptions {
+                sourceCompatibility JavaVersion.VERSION_17
+                targetCompatibility JavaVersion.VERSION_17
+            }
+            kotlinOptions {
+                jvmTarget = '17'
+            }
+        }
+        dependencies {
+            implementation 'androidx.appcompat:appcompat:1.6.1'
+        }
+        EOF
+
+    - name: Generate Gradle Wrapper
+      run: gradle wrapper --gradle-version 8.2
+
+    - name: Grant Execute Permissions
       run: chmod +x gradlew
 
     - name: Build Debug APK
@@ -28,4 +96,3 @@ jobs:
       with:
         name: Minimal-Terminal-APK
         path: app/build/outputs/apk/debug/app-debug.apk
-        
