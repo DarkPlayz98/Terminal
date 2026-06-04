@@ -15,14 +15,14 @@ import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
-    // Ultra-fast thread pool for concurrent tasks
+    // Ultra-fast 10-thread pool for concurrent operations
     private val executor = Executors.newFixedThreadPool(10) 
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Hide ActionBar for immersive look
+        // Ensure minimalist full-screen design
         supportActionBar?.hide() 
 
         webView = WebView(this)
@@ -32,10 +32,8 @@ class MainActivity : AppCompatActivity() {
         webView.settings.domStorageEnabled = true
         webView.webViewClient = WebViewClient()
         
-        // Bind Kotlin to your JavaScript
+        // Link Native Android to Custom UI
         webView.addJavascriptInterface(TerminalBridge(), "Android")
-        
-        // Load the HTML file from assets
         webView.loadUrl("file:///android_asset/index.html")
     }
 
@@ -44,7 +42,6 @@ class MainActivity : AppCompatActivity() {
         fun execute(command: String) {
             executor.execute {
                 try {
-                    // Run command inside the app's private directory
                     val process = Runtime.getRuntime().exec(command, null, filesDir)
                     val reader = BufferedReader(InputStreamReader(process.inputStream))
                     var line: String?
@@ -60,30 +57,38 @@ class MainActivity : AppCompatActivity() {
                         webView.evaluateJavascript("appendOutput('$finalOutput')", null)
                     }
                 } catch (e: Exception) {
+                    val errorMsg = e.message?.replace("'", "\\'") ?: "Unknown error"
                     runOnUiThread {
-                        webView.evaluateJavascript("appendOutput('Error: ${e.message}')", null)
+                        webView.evaluateJavascript("appendOutput('Error: $errorMsg')", null)
                     }
                 }
             }
         }
 
         @JavascriptInterface
-        fun installPackage(pkgName: String) {
+        fun installPackage(target: String) {
             executor.execute {
                 try {
+                    val parts = target.split("/")
+                    val pkgName = parts.last()
+
                     val targetDir = File(filesDir, "bin")
                     targetDir.mkdirs()
                     val targetFile = File(targetDir, pkgName)
                     
-                    // Directly pull raw binaries from your GitHub repo
-                    val repoUrl = "https://raw.githubusercontent.com/Itz_MeDark/termux-commands/main/$pkgName"
+                    // Universal repository logic
+                    val repoUrl = if (parts.size >= 3) {
+                        "https://raw.githubusercontent.com/${parts[0]}/${parts[1]}/main/${parts.drop(2).joinToString("/")}"
+                    } else {
+                        "https://raw.githubusercontent.com/Itz_MeDark/termux-commands/main/$target"
+                    }
+
                     URL(repoUrl).openStream().use { input ->
                         FileOutputStream(targetFile).use { output ->
                             input.copyTo(output)
                         }
                     }
                     
-                    // Instantly make the downloaded file executable
                     targetFile.setExecutable(true)
                     
                     runOnUiThread {
@@ -91,7 +96,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 } catch (e: Exception) {
                      runOnUiThread {
-                        webView.evaluateJavascript("stopDownloadAnimation('<span style=\"color:#ff4500;\">✘ Download failed: ${e.message}</span>')", null)
+                        webView.evaluateJavascript("stopDownloadAnimation('<span style=\"color:#ff4500;\">✘ Download failed: Verify repository or connection.</span>')", null)
                     }
                 }
             }
