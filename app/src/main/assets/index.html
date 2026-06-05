@@ -5,48 +5,38 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <style>
   :root {
-    --bg: #1C1B1F;
-    --surface: #2B2930;
-    --primary: #D0BCFF;
-    --on-bg: #E6E1E5;
-    --border: #49454F;
+    --bg: #1C1B1F; --surface: #2B2930; --primary: #D0BCFF;
+    --on-bg: #E6E1E5; --border: #49454F;
   }
   body { 
     margin: 0; background: var(--bg); color: var(--on-bg); 
     font-family: monospace; display: flex; flex-direction: column; 
     height: 100vh; overflow: hidden; font-size: 14px;
   }
-  
-  /* Main Terminal Area */
   #terminal { 
-    flex-grow: 1; padding: 16px; overflow-y: auto; 
-    padding-bottom: 80px; /* Space for bottom bars */
+    flex-grow: 1; padding: 16px; overflow-y: auto; padding-bottom: 90px; 
   }
   .prompt { color: var(--primary); font-weight: bold; margin-right: 8px; }
-  
-  /* Bottom Input Bar */
   #input-wrapper {
-    position: fixed; bottom: 45px; width: 100%; 
-    background: var(--bg); display: flex; align-items: center; 
-    padding: 8px 16px; box-sizing: border-box;
+    position: fixed; bottom: 45px; width: 100%; background: var(--bg); 
+    display: flex; align-items: center; padding: 8px 16px; box-sizing: border-box;
   }
   input {
     background: transparent; border: none; color: var(--on-bg);
     font-family: monospace; font-size: 14px; flex-grow: 1; outline: none;
   }
-
-  /* Extra Keys Bar (Termux Style) */
+  /* Extra Keys Bar */
   #extra-keys {
-    position: fixed; bottom: 0; width: 100%; height: 45px;
-    background: var(--surface); display: flex; justify-content: space-evenly;
-    align-items: center; border-top: 1px solid var(--border);
+    position: fixed; bottom: 0; width: 100%; height: 45px; background: var(--surface); 
+    display: flex; justify-content: space-evenly; align-items: center; border-top: 1px solid var(--border);
   }
   .key {
     color: var(--on-bg); padding: 8px 12px; border-radius: 4px;
-    user-select: none; font-size: 12px; font-weight: bold; font-family: sans-serif;
+    user-select: none; font-size: 12px; font-weight: bold; font-family: sans-serif; transition: 0.2s;
   }
   .key:active { background: var(--border); }
-
+  .key.active { background: var(--primary); color: #000; }
+  
   /* Nano Editor Overlay */
   #nano-editor {
     display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -55,12 +45,8 @@
   #nano-header {
     background: var(--surface); padding: 12px 16px; display: flex; 
     justify-content: space-between; align-items: center; font-family: sans-serif;
-    border-bottom: 1px solid var(--border);
   }
-  .nano-btn {
-    background: var(--primary); color: #381E72; border: none; 
-    padding: 6px 12px; border-radius: 100px; font-weight: bold;
-  }
+  .nano-btn { background: var(--primary); color: #381E72; border: none; padding: 6px 12px; border-radius: 100px; font-weight: bold; }
   #nano-textarea {
     flex-grow: 1; background: var(--bg); color: var(--on-bg); border: none;
     padding: 16px; font-family: monospace; font-size: 14px; outline: none; resize: none;
@@ -70,7 +56,8 @@
 <body>
 
 <div id="terminal">
-  <div>NexusTerm v1.0.0 (Material 3 Edition)</div>
+  <div>NexusTerm v1.1.0</div>
+  <div>Use 'pkg install [url]' to download raw scripts.</div>
   <div>Type 'nano [filename]' to open the code editor.</div>
   <div id="output"></div>
 </div>
@@ -80,14 +67,16 @@
   <input type="text" id="cmd" autofocus autocomplete="off" spellcheck="false">
 </div>
 
+<!-- Functional Extra Keys -->
 <div id="extra-keys">
-  <div class="key" onclick="insertTab()">TAB</div>
-  <div class="key" onclick="cmdInput.focus()">CTRL</div>
-  <div class="key" onclick="cmdInput.focus()">ALT</div>
+  <div class="key" id="key-esc" onclick="sendEsc()">ESC</div>
+  <div class="key" id="key-tab" onclick="insertTab()">TAB</div>
+  <div class="key" id="key-ctrl" onclick="toggleCtrl()">CTRL</div>
   <div class="key" onclick="historyUp()">▲</div>
   <div class="key" onclick="historyDown()">▼</div>
 </div>
 
+<!-- Built-in Nano UI -->
 <div id="nano-editor">
   <div id="nano-header">
     <span id="nano-title">Editing: unknown.sh</span>
@@ -102,86 +91,81 @@
 <script>
   const cmdInput = document.getElementById('cmd');
   const output = document.getElementById('output');
-  
-  // Command History Logic
-  let cmdHistory = [];
-  let historyIdx = -1;
+  let cmdHistory = []; let historyIdx = -1;
+  let isCtrlActive = false;
+
+  function toggleCtrl() {
+    isCtrlActive = !isCtrlActive;
+    document.getElementById('key-ctrl').classList.toggle('active', isCtrlActive);
+    cmdInput.focus();
+  }
 
   cmdInput.addEventListener('keydown', function (e) {
+    if (isCtrlActive) {
+        e.preventDefault();
+        const key = e.key.toLowerCase();
+        if (key === 'l') { output.innerHTML = ''; } // Clear screen
+        else if (key === 'c') { 
+            output.innerHTML += `<br><span class="prompt">nexus~$</span> ${cmdInput.value}^C`;
+            cmdInput.value = '';
+        }
+        else if (key === 'u') { cmdInput.value = ''; } // Clear line
+        
+        toggleCtrl(); // Turn off ctrl after use
+        return;
+    }
+
     if (e.key === 'Enter') {
       const command = cmdInput.value.trim();
-      if (!command) return;
+      if (!command) {
+          output.innerHTML += `<br><span class="prompt">nexus~$</span>`;
+          scrollToBottom();
+          return;
+      }
       
       output.innerHTML += `<br><span class="prompt">nexus~$</span> ${command}`;
       cmdInput.value = '';
-      
-      cmdHistory.unshift(command);
-      historyIdx = -1;
+      cmdHistory.unshift(command); historyIdx = -1;
 
+      // --- COMMAND PARSER ---
       if (command === 'clear') {
          output.innerHTML = '';
-      } else if (command.startsWith('nano ')) {
-         const filename = command.split(' ')[1];
+      } 
+      else if (command.startsWith('nano ')) {
+         const filename = command.substring(5).trim();
          if (filename) Android.readFile(filename);
-      } else if (command.startsWith('install ')) {
-         Android.installPackage(command.split(' ')[1]);
-      } else {
+      } 
+      else if (command.startsWith('pkg install ') || command.startsWith('install ')) {
+         const target = command.replace('pkg install ', '').replace('install ', '').trim();
+         Android.installPackage(target);
+      } 
+      else {
          Android.execute(command);
       }
       scrollToBottom();
     }
   });
 
-  // Extra Keys Functions
-  function insertTab() {
-    cmdInput.value += '    ';
-    cmdInput.focus();
-  }
-  function historyUp() {
-    if (historyIdx < cmdHistory.length - 1) {
-      historyIdx++;
-      cmdInput.value = cmdHistory[historyIdx];
-    }
-  }
-  function historyDown() {
-    if (historyIdx > 0) {
-      historyIdx--;
-      cmdInput.value = cmdHistory[historyIdx];
-    } else if (historyIdx === 0) {
-      historyIdx = -1;
-      cmdInput.value = '';
-    }
-  }
+  function insertTab() { cmdInput.value += '    '; cmdInput.focus(); }
+  function sendEsc() { cmdInput.value = ''; cmdInput.focus(); }
+  function historyUp() { if (historyIdx < cmdHistory.length - 1) { historyIdx++; cmdInput.value = cmdHistory[historyIdx]; } }
+  function historyDown() { if (historyIdx > 0) { historyIdx--; cmdInput.value = cmdHistory[historyIdx]; } else if (historyIdx === 0) { historyIdx = -1; cmdInput.value = ''; } }
 
-  // Nano Editor Functions
+  // Nano Logic
   let currentNanoFile = "";
-  
   function openNanoUI(filename, content) {
     currentNanoFile = filename;
     document.getElementById('nano-title').innerText = `Editing: ${filename}`;
     document.getElementById('nano-textarea').value = content;
     document.getElementById('nano-editor').style.display = 'flex';
   }
-
-  function closeNano() {
-    document.getElementById('nano-editor').style.display = 'none';
-    cmdInput.focus();
-  }
-
+  function closeNano() { document.getElementById('nano-editor').style.display = 'none'; cmdInput.focus(); }
   function saveNano() {
-    const content = document.getElementById('nano-textarea').value;
-    Android.saveFile(currentNanoFile, content);
+    Android.saveFile(currentNanoFile, document.getElementById('nano-textarea').value);
     closeNano();
   }
-
-  // Engine Callbacks
-  function appendOutput(msg) {
-     output.innerHTML += `<br>${msg}`;
-     scrollToBottom();
-  }
-  function scrollToBottom() {
-     document.getElementById('terminal').scrollTop = document.getElementById('terminal').scrollHeight;
-  }
+  function appendOutput(msg) { output.innerHTML += `<br>${msg}`; scrollToBottom(); }
+  function scrollToBottom() { document.getElementById('terminal').scrollTop = document.getElementById('terminal').scrollHeight; }
 </script>
 </body>
 </html>
