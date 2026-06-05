@@ -15,15 +15,12 @@ import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
-    // Ultra-fast 10-thread pool for concurrent operations
-    private val executor = Executors.newFixedThreadPool(10) 
+    private val executor = Executors.newFixedThreadPool(10)
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // Ensure minimalist full-screen design
-        supportActionBar?.hide() 
+        supportActionBar?.hide()
 
         webView = WebView(this)
         setContentView(webView)
@@ -32,7 +29,6 @@ class MainActivity : AppCompatActivity() {
         webView.settings.domStorageEnabled = true
         webView.webViewClient = WebViewClient()
         
-        // Link Native Android to Custom UI
         webView.addJavascriptInterface(TerminalBridge(), "Android")
         webView.loadUrl("file:///android_asset/index.html")
     }
@@ -42,7 +38,12 @@ class MainActivity : AppCompatActivity() {
         fun execute(command: String) {
             executor.execute {
                 try {
-                    val process = Runtime.getRuntime().exec(command, null, filesDir)
+                    // FIX FOR ERROR 13: Execute via the native Android shell
+                    val process = ProcessBuilder("/system/bin/sh", "-c", command)
+                        .directory(filesDir)
+                        .redirectErrorStream(true)
+                        .start()
+
                     val reader = BufferedReader(InputStreamReader(process.inputStream))
                     var line: String?
                     val output = StringBuilder()
@@ -52,7 +53,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     process.waitFor()
                     
-                    val finalOutput = output.toString().replace("'", "\\'")
+                    val finalOutput = output.toString().replace("'", "\\'").replace("\n", "<br>")
                     runOnUiThread {
                         webView.evaluateJavascript("appendOutput('$finalOutput')", null)
                     }
@@ -65,6 +66,41 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // ---- NANO EDITOR BRIDGES ----
+        @JavascriptInterface
+        fun readFile(filename: String) {
+            try {
+                val file = File(filesDir, filename)
+                val content = if (file.exists()) file.readText().replace("`", "\\`") else ""
+                runOnUiThread {
+                    webView.evaluateJavascript("openNanoUI('$filename', `$content`)", null)
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    webView.evaluateJavascript("appendOutput('Error reading file: ${e.message}')", null)
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun saveFile(filename: String, content: String) {
+            try {
+                val file = File(filesDir, filename)
+                file.writeText(content)
+                // Make shell scripts executable automatically
+                if (filename.endsWith(".sh")) file.setExecutable(true)
+                
+                runOnUiThread {
+                    webView.evaluateJavascript("appendOutput('File saved: $filename')", null)
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    webView.evaluateJavascript("appendOutput('Error saving file: ${e.message}')", null)
+                }
+            }
+        }
+        // -----------------------------
+
         @JavascriptInterface
         fun installPackage(target: String) {
             executor.execute {
@@ -76,9 +112,8 @@ class MainActivity : AppCompatActivity() {
                     targetDir.mkdirs()
                     val targetFile = File(targetDir, pkgName)
                     
-                    // Universal repository logic
                     val repoUrl = if (parts.size >= 3) {
-                        "https://raw.githubusercontent.com/${parts[0]}/${parts[1]}/main/${parts.drop(2).joinToString("/")}"
+                        "https://raw.githubusercontent.com/${parts[0]}/${parts[1]}/${parts.drop(2).joinToString("/")}"
                     } else {
                         "https://raw.githubusercontent.com/Itz_MeDark/termux-commands/main/$target"
                     }
@@ -92,11 +127,11 @@ class MainActivity : AppCompatActivity() {
                     targetFile.setExecutable(true)
                     
                     runOnUiThread {
-                        webView.evaluateJavascript("stopDownloadAnimation('<span style=\"color:#00ffcc;\">✔ Successfully integrated $pkgName</span>')", null)
+                        webView.evaluateJavascript("appendOutput('<span style=\"color:#D0BCFF;\">✔ Installed $pkgName</span>')", null)
                     }
                 } catch (e: Exception) {
                      runOnUiThread {
-                        webView.evaluateJavascript("stopDownloadAnimation('<span style=\"color:#ff4500;\">✘ Download failed: Verify repository or connection.</span>')", null)
+                        webView.evaluateJavascript("appendOutput('<span style=\"color:#F2B8B5;\">✘ Download failed</span>')", null)
                     }
                 }
             }
