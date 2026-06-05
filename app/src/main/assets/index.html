@@ -1,106 +1,184 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <style>
+  :root {
+    --bg: #1C1B1F;
+    --surface: #2B2930;
+    --primary: #D0BCFF;
+    --on-bg: #E6E1E5;
+    --border: #49454F;
+  }
   body { 
-    margin: 0; 
-    background: #000; 
-    color: #fff; 
-    font-family: monospace; 
-    overflow: hidden; 
+    margin: 0; background: var(--bg); color: var(--on-bg); 
+    font-family: monospace; display: flex; flex-direction: column; 
+    height: 100vh; overflow: hidden; font-size: 14px;
   }
+  
+  /* Main Terminal Area */
   #terminal { 
-    padding: 15px; 
-    height: 100vh; 
-    box-sizing: border-box; 
-    overflow-y: auto; 
+    flex-grow: 1; padding: 16px; overflow-y: auto; 
+    padding-bottom: 80px; /* Space for bottom bars */
   }
-  .glass-panel {
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(15px);
-    -webkit-backdrop-filter: blur(15px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    padding: 12px;
-    margin-bottom: 15px;
-    transition: all 0.3s ease;
-  }
-  .input-line { 
-    display: flex; 
-    align-items: center; 
-  }
-  .prompt { 
-    color: #00ffcc; 
-    margin-right: 10px; 
-    font-weight: bold;
+  .prompt { color: var(--primary); font-weight: bold; margin-right: 8px; }
+  
+  /* Bottom Input Bar */
+  #input-wrapper {
+    position: fixed; bottom: 45px; width: 100%; 
+    background: var(--bg); display: flex; align-items: center; 
+    padding: 8px 16px; box-sizing: border-box;
   }
   input {
-    background: transparent; 
-    border: none; 
-    color: #fff;
-    font-family: monospace; 
-    font-size: 16px; 
-    flex-grow: 1; 
-    outline: none;
+    background: transparent; border: none; color: var(--on-bg);
+    font-family: monospace; font-size: 14px; flex-grow: 1; outline: none;
   }
-  /* Fire Download Animation */
-  @keyframes fire-glow {
-    0% { box-shadow: 0 0 5px #ff4500, 0 0 10px #ff4500; border-color: #ff4500; }
-    50% { box-shadow: 0 0 20px #ff8c00, 0 0 30px #ff8c00; border-color: #ff8c00; }
-    100% { box-shadow: 0 0 5px #ff4500, 0 0 10px #ff4500; border-color: #ff4500; }
+
+  /* Extra Keys Bar (Termux Style) */
+  #extra-keys {
+    position: fixed; bottom: 0; width: 100%; height: 45px;
+    background: var(--surface); display: flex; justify-content: space-evenly;
+    align-items: center; border-top: 1px solid var(--border);
   }
-  .downloading {
-    animation: fire-glow 1s infinite;
+  .key {
+    color: var(--on-bg); padding: 8px 12px; border-radius: 4px;
+    user-select: none; font-size: 12px; font-weight: bold; font-family: sans-serif;
+  }
+  .key:active { background: var(--border); }
+
+  /* Nano Editor Overlay */
+  #nano-editor {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: var(--bg); flex-direction: column; z-index: 100;
+  }
+  #nano-header {
+    background: var(--surface); padding: 12px 16px; display: flex; 
+    justify-content: space-between; align-items: center; font-family: sans-serif;
+    border-bottom: 1px solid var(--border);
+  }
+  .nano-btn {
+    background: var(--primary); color: #381E72; border: none; 
+    padding: 6px 12px; border-radius: 100px; font-weight: bold;
+  }
+  #nano-textarea {
+    flex-grow: 1; background: var(--bg); color: var(--on-bg); border: none;
+    padding: 16px; font-family: monospace; font-size: 14px; outline: none; resize: none;
   }
 </style>
 </head>
 <body>
+
 <div id="terminal">
-  <div class="glass-panel" id="output">Core Engine Initialized.<br>Ready for input.</div>
-  <div class="input-line glass-panel" id="input-container">
-    <span class="prompt">Itz_MeDark@local:~$</span>
-    <input type="text" id="cmd" autofocus autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+  <div>NexusTerm v1.0.0 (Material 3 Edition)</div>
+  <div>Type 'nano [filename]' to open the code editor.</div>
+  <div id="output"></div>
+</div>
+
+<div id="input-wrapper">
+  <span class="prompt">nexus~$</span>
+  <input type="text" id="cmd" autofocus autocomplete="off" spellcheck="false">
+</div>
+
+<div id="extra-keys">
+  <div class="key" onclick="insertTab()">TAB</div>
+  <div class="key" onclick="cmdInput.focus()">CTRL</div>
+  <div class="key" onclick="cmdInput.focus()">ALT</div>
+  <div class="key" onclick="historyUp()">▲</div>
+  <div class="key" onclick="historyDown()">▼</div>
+</div>
+
+<div id="nano-editor">
+  <div id="nano-header">
+    <span id="nano-title">Editing: unknown.sh</span>
+    <div>
+      <button class="nano-btn" onclick="closeNano()" style="background:transparent; color:var(--primary);">Cancel</button>
+      <button class="nano-btn" onclick="saveNano()">Save</button>
+    </div>
   </div>
+  <textarea id="nano-textarea" spellcheck="false"></textarea>
 </div>
 
 <script>
-  const input = document.getElementById('cmd');
+  const cmdInput = document.getElementById('cmd');
   const output = document.getElementById('output');
-  const inputContainer = document.getElementById('input-container');
+  
+  // Command History Logic
+  let cmdHistory = [];
+  let historyIdx = -1;
 
-  input.addEventListener('keypress', function (e) {
+  cmdInput.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') {
-      const command = input.value.trim();
+      const command = cmdInput.value.trim();
       if (!command) return;
       
-      output.innerHTML += `<br><br><span class="prompt">Itz_MeDark@local:~$</span> ${command}`;
-      input.value = '';
+      output.innerHTML += `<br><span class="prompt">nexus~$</span> ${command}`;
+      cmdInput.value = '';
+      
+      cmdHistory.unshift(command);
+      historyIdx = -1;
 
-      if (command.startsWith('install')) {
-         inputContainer.classList.add('downloading');
-         output.innerHTML += `<br>[*] Igniting download streams...`;
-         // Send command to Kotlin native bridge
+      if (command === 'clear') {
+         output.innerHTML = '';
+      } else if (command.startsWith('nano ')) {
+         const filename = command.split(' ')[1];
+         if (filename) Android.readFile(filename);
+      } else if (command.startsWith('install ')) {
          Android.installPackage(command.split(' ')[1]);
       } else {
-         // Pass standard commands to the native shell
          Android.execute(command);
       }
       scrollToBottom();
     }
   });
 
-  function stopDownloadAnimation(msg) {
-     inputContainer.classList.remove('downloading');
-     output.innerHTML += `<br>${msg}`;
-     scrollToBottom();
+  // Extra Keys Functions
+  function insertTab() {
+    cmdInput.value += '    ';
+    cmdInput.focus();
+  }
+  function historyUp() {
+    if (historyIdx < cmdHistory.length - 1) {
+      historyIdx++;
+      cmdInput.value = cmdHistory[historyIdx];
+    }
+  }
+  function historyDown() {
+    if (historyIdx > 0) {
+      historyIdx--;
+      cmdInput.value = cmdHistory[historyIdx];
+    } else if (historyIdx === 0) {
+      historyIdx = -1;
+      cmdInput.value = '';
+    }
   }
 
+  // Nano Editor Functions
+  let currentNanoFile = "";
+  
+  function openNanoUI(filename, content) {
+    currentNanoFile = filename;
+    document.getElementById('nano-title').innerText = `Editing: ${filename}`;
+    document.getElementById('nano-textarea').value = content;
+    document.getElementById('nano-editor').style.display = 'flex';
+  }
+
+  function closeNano() {
+    document.getElementById('nano-editor').style.display = 'none';
+    cmdInput.focus();
+  }
+
+  function saveNano() {
+    const content = document.getElementById('nano-textarea').value;
+    Android.saveFile(currentNanoFile, content);
+    closeNano();
+  }
+
+  // Engine Callbacks
   function appendOutput(msg) {
      output.innerHTML += `<br>${msg}`;
      scrollToBottom();
   }
-
   function scrollToBottom() {
      document.getElementById('terminal').scrollTop = document.getElementById('terminal').scrollHeight;
   }
